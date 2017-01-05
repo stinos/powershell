@@ -43,6 +43,42 @@ function Expand-FromWeb {
 
 <#
 .SYNOPSIS
+Email sending via implcit SSL.
+See http://nicholasarmstrong.com/2009/12/sending-email-with-powershell-implicit-and-explicit-ssl/
+#>
+function Send-MailMessageOverImplcitSSL {
+  param (
+    [Parameter(Mandatory)] [String] $To,
+    [Parameter(Mandatory)] [String] $From,
+    [Parameter()] [String] $Subject = '',
+    [Parameter(Mandatory)] [String] $Body,
+    [Parameter(Mandatory)] [String] $SmtpServer,
+    [Parameter(Mandatory)] [Int] $Port,
+    [Parameter(Mandatory)] [String] $Username,
+    [Parameter(Mandatory)] [String] $Password
+  )
+
+  [System.Reflection.Assembly]::LoadWithPartialName("System.Web") > $null
+
+  $mail = New-Object System.Web.Mail.MailMessage
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/smtpserver", $SmtpServer)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/smtpserverport", $Port)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/smtpusessl", $True)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/sendusername", $UserName)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/sendpassword", $Password)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/sendusing", 2)
+  $mail.Fields.Add("http://schemas.microsoft.com/cdo/configuration/smtpauthenticate", 1)
+
+  $mail.From = $From
+  $mail.To = $To
+  $mail.Subject = $Subject
+  $mail.Body = $Body
+
+  [System.Web.Mail.SmtpMail]::Send($mail)
+}
+
+<#
+.SYNOPSIS
 Raise an error if last external command had an error (check on $LastExitCode).
 #>
 function Test-LastExitCode {
