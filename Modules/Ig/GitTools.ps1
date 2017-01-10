@@ -226,7 +226,7 @@ function Invoke-Mr {
       Write-Host -ForegroundColor cyan '[mr] ' $_.directory
       Invoke-CloneIfNeeded $_
       if( $Command.Count -gt 0 ) {
-        Invoke-Git $_.directory $Command
+        Invoke-Git $_.directory -Command $Command
       }
     }
   }
