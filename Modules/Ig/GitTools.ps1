@@ -56,7 +56,7 @@ function Get-MrRepos {
     $branch = ($regexMatch.Context.PostContext | sls -pattern 'checkout\s+?(\S+)?' | %{ $_.Matches[0].Groups[1].Value })
     if(-not $branch) { 'master' } else { $branch }
   }
-  return sls $MrConfig -Pattern "^checkout\s+=\s+git\s+clone\s+'?(\S+)'?\s+'?(\S+)'?" -Context (0, 1) |
+  return sls $MrConfig -Pattern "^checkout\s+=\s+git\s+clone\s+'?([^']+)'?\s+'?([^']+)'?" -Context (0, 1) |
     % { @{ 'remote' = $_.Matches[0].Groups[1].Value;
            'directory' = (Join-Path $baseDir $_.Matches[0].Groups[2].Value);
            'branch' = (& $getBranch $_) } }
