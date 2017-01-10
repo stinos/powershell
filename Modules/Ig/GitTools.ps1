@@ -233,3 +233,4 @@ function Invoke-Mr {
 }
 
 New-Alias -Name Mr -Value Invoke-Mr
+New-Alias -Name IGit -Value Invoke-Git
