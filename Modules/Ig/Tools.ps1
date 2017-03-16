@@ -142,5 +142,40 @@ function Set-EnvFromBatchFile {
   }
 }
 
+<#
+.SYNOPSIS
+Register a ScriptBlock for being called when files change.
+This includes creation, modification, deletion and renaming.
+When no ScriptBlock is passed a default one is used which prints information
+on each change. Returns the watcher object and all regsitered events.
+.EXAMPLE
+Register-FileSystemWatcher -Directory c:\temp -Filter '*.c' -IncludeSubdirectories
+#>
+Function Register-FileSystemWatcher {
+  param (
+    [Parameter(Mandatory)] [Alias('Folder')] [ValidateScript({Test-Path $_})] [String] $Directory,
+    [Parameter()] [Alias('Filter')] [String] $Wildcard = '*.*',
+    [Parameter()] [Switch] $IncludeSubdirectories,
+    [Parameter()] [Alias('Callback')] [ScriptBlock] $Action
+  )
+
+  $watcher = New-Object IO.FileSystemWatcher $Directory, $Wildcard -Property @{
+    IncludeSubdirectories = $IncludeSubdirectories
+    EnableRaisingEvents = $True
+  }
+
+  if(-not $Action -Or ($Action -eq $Null)) {
+    $Action = {
+      Write-Host "$($Event.TimeGenerated) File $($Event.SourceEventArgs.ChangeType): '$($Event.SourceEventArgs.FullPath)'"
+    }
+  }
+
+  $changed = Register-ObjectEvent $watcher Changed -Action $Action
+  $created = Register-ObjectEvent $watcher Created -Action $Action
+  $deleted = Register-ObjectEvent $watcher Deleted -Action $Action
+  $renamed = Register-ObjectEvent $watcher Renamed -Action $Action
+  return $watcher, $changed, $created, $deleted, $renamed
+}
+
 New-Alias -Force -Name Exec -Value Invoke-External
 New-Alias -Force -Name Ex -Value Invoke-File
