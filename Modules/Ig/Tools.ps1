@@ -31,6 +31,8 @@ function Expand-FromWeb {
 
   try {
     Write-Verbose "Downloading $Address to $ZipFile"
+    # By default powershell uses TLS 1.0 but the site security might require TLS 1.2
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     Invoke-WebRequest $Address -OutFile $ZipFile -ErrorAction Stop
   }
   catch {
