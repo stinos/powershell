@@ -170,29 +170,6 @@ function Invoke-CloneIfNeeded {
 
 <#
 .SYNOPSIS
-TODO review this
-#>
-Workflow InvokeGitParallel {
-  param(
-    [Parameter()] [String] $ThisFilePath,
-    [Parameter()] [Object[]] $Repositories,
-    [Parameter()] [String[]] $Command
-  )
-
-  foreach -Parallel ($repo in $Repositories) {
-    InlineScript {
-      . $Using:ThisFilePath
-      $cloneOutput = Invoke-CloneIfNeeded $Using:repo
-      $gitOutput = Invoke-Git $Using:repo.directory -Command $Using:gitCommand
-      Write-Warning -Message ('[mr] ' + $Using:repo.directory)
-      Write-Output -InputObject ($cloneOutput)
-      Write-Output -InputObject ($gitOutput)
-    }
-  }
-}
-
-<#
-.SYNOPSIS
 Multiple repository tool for git
 .DESCRIPTION
 Run git commands on multiple repositories.
@@ -200,6 +177,7 @@ By default looks for repositories in .mrconfig, see Get-MrRepos,
 or existing repositories to run on can be passed instead.
 .EXAMPLE
 PS C:\> Mr # will clone if needed
+PS C:\> Mr -Table status # output table to pipeline, don't use Write-Host
 PS C:\> Mr pull --rebase
 PS C:\> Mr -Repositories a, b, c checkout master
 PS C:\> Mr checkout master -Repositories a, b, c
@@ -208,7 +186,7 @@ function Invoke-Mr {
   param (
     [Parameter()] [String[]] $Repositories = @(),
     [Parameter()] [String] $Directory = (Get-Location),
-    [Parameter()] [Switch] $Parallel,
+    [Parameter()] [Switch] $Table,
     [Parameter(Position = 0, ValueFromRemainingArguments = $True)] [String[]] $Command
   )
 
@@ -219,15 +197,27 @@ function Invoke-Mr {
     $repoObjects =  $Repositories | %{ @{'remote' = ''; 'directory' = (Resolve-Path $_); 'branch' = ''} }
   }
 
-  if( $Parallel -eq $True ) {
-    InvokeGitParallel $PSCommandPath -Repositories $repoObjects -Command $Command
-  }
-  else {
-    $repoObjects | % {
+  $repoObjects | % {
+    if (-not $Table) {
       Write-Host -ForegroundColor cyan '[mr] ' $_.directory
+    }
+    if ($Table) {
+      $cloneOutput = Invoke-CloneIfNeeded $_
+    } else {
       Invoke-CloneIfNeeded $_
-      if( $Command.Count -gt 0 ) {
+    }
+    if ($Command.Count -gt 0) {
+      if ($Table) {
+        $gitOutput = Invoke-Git $_.directory -Command $Command
+      } else {
         Invoke-Git $_.directory -Command $Command
+      }
+    }
+    if ($Table) {
+      [PSCustomObject]@{
+        'directory' = $_.directory
+        'git' = $gitOutput
+        'clone' = $cloneOutput
       }
     }
   }
