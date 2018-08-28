@@ -178,6 +178,7 @@ or existing repositories to run on can be passed instead.
 .EXAMPLE
 PS C:\> Mr # will clone if needed
 PS C:\> Mr -Table status # output table to pipeline, don't use Write-Host
+PS C:\> Mr -Script { $Args[0] } # run arbitrary code for each repository, first argument is result from Get-MrRepos, second one the command
 PS C:\> Mr pull --rebase
 PS C:\> Mr -Repositories a, b, c checkout master
 PS C:\> Mr checkout master -Repositories a, b, c
@@ -187,6 +188,7 @@ function Invoke-Mr {
     [Parameter()] [String[]] $Repositories = @(),
     [Parameter()] [String] $Directory = (Get-Location),
     [Parameter()] [Switch] $Table,
+    [Parameter()] [ScriptBlock] $Script,
     [Parameter(Position = 0, ValueFromRemainingArguments = $True)] [String[]] $Command
   )
 
@@ -206,7 +208,14 @@ function Invoke-Mr {
     } else {
       Invoke-CloneIfNeeded $_
     }
-    if ($Command.Count -gt 0) {
+    if ($Script) {
+      if ($Table) {
+        $gitOutput = & $Script $_ $Command
+      } else {
+        & $Script $_ $Command
+      }      
+    }
+    elseif ($Command.Count -gt 0) {
       if ($Table) {
         $gitOutput = Invoke-Git $_.directory -Command $Command
       } else {
