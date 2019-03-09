@@ -203,10 +203,12 @@ function Invoke-Mr {
     if (-not $Table) {
       Write-Host -ForegroundColor cyan '[mr] ' $_.directory
     }
-    if ($Table) {
-      $cloneOutput = Invoke-CloneIfNeeded $_
-    } else {
-      Invoke-CloneIfNeeded $_
+    if($_.remote) {
+      if ($Table) {
+        $cloneOutput = Invoke-CloneIfNeeded $_
+      } else {
+        Invoke-CloneIfNeeded $_
+      }
     }
     if ($Script) {
       if ($Table) {
