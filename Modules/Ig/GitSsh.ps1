@@ -31,6 +31,7 @@ function Write-SshConfig {
   param(
     [Parameter(Mandatory)] [AllowEmptyCollection()] [Hashtable[]] $Hosts,
     [Parameter()] [String] $SshDir = (Join-Path $env:USERPROFILE '.ssh'),
+    [Parameter()] [String] $LogLevel = 'INFO',
     [Parameter()] [Switch] $Overwrite = $False
   )
   $sshConfigFile = Join-Path $SshDir 'config'
@@ -41,6 +42,7 @@ function Write-SshConfig {
     $fileContent += "  User git`n"
     $fileContent += "  Hostname " + $($h.host) + "`n"
     $fileContent += "  PreferredAuthentications publickey`n"
+    $fileContent += "  LogLevel $LogLevel`n"
     $fileContent += "  IdentityFile " + $(Join-Path $SshDir $h.key) + "`n"
   }
   Write-Verbose $fileContent
@@ -111,6 +113,7 @@ function Install-SshConfig {
   param (
     [Parameter(Mandatory)] [AllowEmptyCollection()] [Hashtable[]] $Hosts,
     [Parameter(Mandatory)] [Hashtable] $Keys,
+    [Parameter()] [String] $LogLevel = 'INFO',
     [Parameter()] [String] $SshDir = (Join-Path $env:USERPROFILE '.ssh')
   )
 
@@ -118,5 +121,5 @@ function Install-SshConfig {
     Write-PrivateRsaKeyFile $Keys[$key] (Join-Path $SshDir $key)
   }
 
-  Write-SshConfig $Hosts $SshDir
+  Write-SshConfig $Hosts $SshDir $LogLevel
 }
