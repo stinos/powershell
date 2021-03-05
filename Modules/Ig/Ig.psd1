@@ -63,7 +63,7 @@ Copyright = '(c) 2016 stijn. All rights reserved.'
 # FormatsToProcess = @()
 
 # Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
-NestedModules = @('Tools.ps1', 'GitTools.ps1', 'GitSsh.ps1')
+NestedModules = @('Archive.ps1', 'Tools.ps1', 'GitTools.ps1', 'GitSsh.ps1')
 
 # Functions to export from this module; exclude those without standard name
 FunctionsToExport = @('*-*')
