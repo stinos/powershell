@@ -81,35 +81,51 @@ function Send-MailMessageOverImplcitSSL {
 
 <#
 .SYNOPSIS
-Raise an error if last external command had an error (check on $LastExitCode).
+Write an error if last external command had an error (check on $LASTEXITCODE).
+.PARAMETER CleanupScript
+Code to run when an $LASTEXITCODE is non-zero, before raising the error.
+.PARAMETER CommandName
+Command name to include in error message.
 #>
 function Test-LastExitCode {
   param (
-    [Parameter()] [ScriptBlock] $CleanupScript = $Null
+    [Parameter()] [ScriptBlock] $CleanupScript = $Null,
+    [Parameter()] [String] [Alias('Name')] $CommandName = "External command"
   )
 
-  if($LastExitCode -eq 0) {
+  if($LASTEXITCODE -eq 0) {
     return
   }
   if($CleanupScript) {
     & $CleanupScript
   }
-  Write-Error "External command returned exit code $LastExitCode"
+  Write-Error "$CommandName exited with $LASTEXITCODE" -Category FromStdErr
 }
 
 <#
 .SYNOPSIS
 Execute external command and throw if it had an error.
+Note the default display of the error record will show this function
+at the top of the stacktrace i.e. will say "At ...\Tools.ps1:<lineno>"
+which is not very useful. Use Test-LastExitCode directly to avoid that.
+.PARAMETER ExternalCommand
+The command to run, as ScriptBlock.
+.PARAMETER CommandName
+Command name to include in error message, defaults to $ExternalCommand.
 .EXAMPLE
 Invoke-External { msbuild my.vcxproj }
 #>
 function Invoke-External {
   param (
-    [Parameter(Mandatory)] [Alias('Command')] [ScriptBlock] $ExternalCommand
+    [Parameter(Mandatory)] [Alias('Command')] [ScriptBlock] $ExternalCommand,
+    [Parameter()] [Alias('Name')] [String] $CommandName
   )
 
   & $ExternalCommand
-  Test-LastExitCode
+  if(-not $CommandName) {
+    $CommandName = "'$ExternalCommand'"
+  }
+  Test-LastExitCode -CommandName $CommandName
 }
 
 <#
