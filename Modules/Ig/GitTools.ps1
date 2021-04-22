@@ -50,7 +50,11 @@ function Get-MrRepos {
     [ValidateScript({Test-Path $_})] [String] $MrConfig = '.\.mrconfig'
   )
 
-  $baseDir = Split-Path (Resolve-Path $MrConfig)
+  # Not using Resolve-Path here: for network drives this returns e.g.
+  # Microsoft.PowerShell.Core\FileSystem::\\server\share\.mrconfig
+  # which is a string which only works in PS, not for git.
+  $fullMrPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($MrConfig)
+  $baseDir = Split-Path $fullMrPath
   $getBranch = {
     param($regexMatch)
     $branch = ($regexMatch.Context.PostContext | sls -pattern 'checkout\s+?(\S+)?' | %{ $_.Matches[0].Groups[1].Value })
