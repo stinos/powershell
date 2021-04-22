@@ -219,7 +219,7 @@ function Invoke-Mr {
         $gitOutput = & $Script $_ $Command
       } else {
         & $Script $_ $Command
-      }      
+      }
     } elseif ($Command.Count -gt 0) {
       if ($Table) {
         $gitOutput = Invoke-Git $_.directory -Command $Command
