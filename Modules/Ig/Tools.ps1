@@ -144,20 +144,149 @@ function Invoke-File {
 
 <#
 .SYNOPSIS
-Read environment variables from batch file and apply them to local PowerShell process.
-Note this applies the complete environment as found in a command process after running the batch file.
+Read environment variables from cmd.exe environment after executing a batch file.
+.DESCRIPTION
+NOTE this runs 'cmd /D' so disables AutoRun commands from the registry. This should make sure that
+the resulting environment is really only the result of the specific batch file (since cmd.exe inherits
+the current environment), and doesn't contain other things added via those AutoRun entries
+(notably: from Anaconda after having ran conda init in a cmd session).
+.PARAMETER BatchFile
+The file to call.
+.PARAMETER BatchFileArgs
+Arguments for the batch file.
+.PARAMETER DiffOnly
+Scan for items which were added or changed by the batchfile and return only those.
+.PARAMETER CompositeKeys
+For use with DiffOnly: list of keys which consist of multiple values separated by ';'.
+For these the set difference will be returned explcicitly as second argument.
+Nore this is just the difference, so if the batch file for instance both adds
+items to the front of PATH and appends to it, these items are returned as one list so the
+insert/append information is lost.
+.OUTPUTS
+Hashtable with variables.
+If DiffOnly is True and CompositeKeys is not empty, another Hashtable with the changed
+items from CompositeKeys as a semicolon-separated string.
+#>
+function Get-EnvFromBatchFile {
+  param (
+    [Parameter(Mandatory)] [Alias('File')] [ValidateScript({Test-Path $_})] [String] $BatchFile,
+    [Parameter()] [String] $BatchFileArgs = '',
+    [Parameter()] [Switch] $DiffOnly,
+    [Parameter()] [String[]] $CompositeKeys = @('PATH', 'PsModulePath')
+  )
+
+  function Get-EnvVars {
+    $vars = @{}
+    foreach ($line in (& cmd /D /C @Args)) {
+      if ($line -match '(.*?)=(.*)') {
+        $vars.Add($Matches[1], $Matches[2])
+      }
+    }
+    $vars
+  }
+
+  if ($DiffOnly) {
+    $cmdBaseEnvVars = Get-EnvVars 'set'
+    if ($CompositeKeys) {
+      $compositeVars = @{}
+    }
+  }
+
+  $vars = @{}
+  $cmdEnvVars = Get-EnvVars """$BatchFile"" $BatchFileArgs > nul 2>&1 && set"
+  foreach ($item in $cmdEnvVars.GetEnumerator()) {
+    $key = $item.key
+    $value = $item.value
+    if ($DiffOnly -and ($cmdBaseEnvVars[$key] -eq $value)) {
+      Write-Verbose "Skip unchanged $key"
+      continue
+    }
+    elseif ($DiffOnly -and ($null -ne $cmdBaseEnvVars[$key]) -and ($key -in $CompositeKeys)) {
+      $listSep = ';'  # This is for batch files, so assume we're on Windows.
+      $newItems = [Collections.Generic.HashSet[string]]::new($value.Split($listSep))
+      $newItems.ExceptWith($cmdBaseEnvVars[$key].Split($listSep))
+      $compositeVars[$key] = $newItems -join $listSep
+      continue
+    }
+    $vars[$key] = $value
+  }
+
+  $vars
+  if ($DiffOnly -and $CompositeKeys) {
+    $compositeVars
+  }
+}
+
+<#
+.SYNOPSIS
+Read environment variables from cmd.exe environment after executing a batch file,
+then apply these variables to the local PowerShell process.
+.DESCRIPTION
+Use to apply changes from other software wich provides batch files to alter environment variables.
+In essence this just consists of executing the batch file then parsing output of 'set' and applying
+it by setting variables in env:. There is a bunch of extra code for verbose showing of what goes on,
+to aid in debugging.
+Note: uses cmd /D, see Get-EnvFromBatchFile.
+.PARAMETER BatchFile
+The file to call.
+.PARAMETER BatchFileArgs
+Arguments for the batch file.
+.EXAMPLE
+Set-EnvFromBatchFile "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
 #>
 function Set-EnvFromBatchFile {
+  [CmdletBinding(SupportsShouldProcess)]
   param (
-    [Parameter(Mandatory)] [Alias('File')] [ValidateScript({Test-Path $_})] [String] $BatchFile
+    [Parameter(Mandatory)] [Alias('File')] [String] $BatchFile,
+    [Parameter()] [String] $BatchFileArgs = ''
   )
 
   Write-Verbose "Set path from $BatchFile"
-  cmd /c """$BatchFile""&set" | foreach {
-    if ($_ -match "(.*?)=(.*)") {
-      Set-Item -force -path "ENV:\$($matches[1])" -value "$($matches[2])"
+
+  $vars = Get-EnvFromBatchFile -BatchFile $BatchFile -BatchFileArgs $BatchFileArgs -DiffOnly -CompositeKeys @()
+  foreach ($item in $vars.GetEnumerator()) {
+    $key = $item.key
+    $value = $item.value
+    if ($PSCmdlet.ShouldProcess("Set $key=$value", '?', '')) {
+      Set-Item -Force -Path "env:\$key" -Value $value
     }
   }
+}
+
+<#
+.SYNOPSIS
+Read environment variables from cmd.exe environment after executing a batch file,
+then write these to a .ps1 file so it can be used to apply the same environment
+but without having to execute the actual batch file.
+Obviously only interestnig for batch files which don't change.
+Inspired by vsdevcmd.bat taking multiple seconds to get the environment for VS ready.
+.PARAMETER BatchFile
+The file to call.
+.PARAMETER PsFile
+The PS file to output
+.PARAMETER BatchFileArgs
+Arguments for the batch file.
+#>
+function Write-EnvFromBatchFile {
+  param (
+    [Parameter(Mandatory)] [String] $BatchFile,
+    [Parameter(Mandatory)] [String] $PsFile,
+    [Parameter()] [String] $BatchFileArgs = '',
+    [Parameter()] [Switch] $DiffOnly,
+    [Parameter()] [String[]] $CompositeKeys = @('PATH', 'PsModulePath')
+  )
+
+  $vars, $compositeVars = Get-EnvFromBatchFile $BatchFile $BatchFileArgs -DiffOnly:$DiffOnly -CompositeKeys $CompositeKeys
+  $result = ''
+  foreach ($item in $vars.GetEnumerator()) {
+    $result += "`$env:$($item.Key) = '$($item.Value)'`n"
+  }
+  if ($compositeVars) {
+    foreach ($item in $compositeVars.GetEnumerator()) {
+      $result += "`$env:$($item.Key) = '$($item.Value)' + ';' + `$env:$($item.Key)`n"
+    }
+  }
+  $result | Out-File -FilePath $PsFile -Encoding ascii
 }
 
 <#
