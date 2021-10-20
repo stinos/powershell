@@ -35,18 +35,18 @@ function Write-SshConfig {
     [Parameter()] [Switch] $Overwrite = $False
   )
   $sshConfigFile = Join-Path $SshDir 'config'
-  $fileContent = ""
-  foreach($h in $Hosts) {
-    Write-Verbose ("Adding {0} to $sshConfigFile" -f (($h.Keys | %{ "$_ $($h[$_])" }) -join ' | ' ))
+  $fileContent = ''
+  foreach ($h in $Hosts) {
+    Write-Verbose ("Adding {0} to $sshConfigFile" -f (($h.Keys | ForEach-Object { "$_ $($h[$_])" }) -join ' | ' ))
     $fileContent += "Host {0}`n" -f (Get-SshAlias $h)
     $fileContent += "  User git`n"
-    $fileContent += "  Hostname " + $($h.host) + "`n"
+    $fileContent += '  Hostname ' + $($h.host) + "`n"
     $fileContent += "  PreferredAuthentications publickey`n"
     $fileContent += "  LogLevel $LogLevel`n"
-    $fileContent += "  IdentityFile " + $(Join-Path $SshDir $h.key) + "`n"
+    $fileContent += '  IdentityFile ' + $(Join-Path $SshDir $h.key) + "`n"
   }
   Write-Verbose $fileContent
-  if($Overwrite) {
+  if ($Overwrite) {
     Set-Content $sshConfigFile $fileContent
   }
   else {
@@ -83,8 +83,8 @@ function Convert-SshAddress {
     [Parameter(Mandatory)] [Alias('Remote', 'Address')] [String] $SshAddress,
     [Parameter(Mandatory)] [AllowEmptyCollection()] [Hashtable[]] $Hosts
   )
-  foreach($h in $Hosts) {
-    if(-not $SshAddress.Contains("$($h.host)`:$($h.owner)")) {
+  foreach ($h in $Hosts) {
+    if (-not $SshAddress.Contains("$($h.host)`:$($h.owner)")) {
       continue
     }
     return $SshAddress.Replace($h.host, (Get-SshAlias $h))
@@ -117,7 +117,7 @@ function Install-SshConfig {
     [Parameter()] [String] $SshDir = (Join-Path $env:USERPROFILE '.ssh')
   )
 
-  foreach($key in $Keys.Keys) {
+  foreach ($key in $Keys.Keys) {
     Write-PrivateRsaKeyFile $Keys[$key] (Join-Path $SshDir $key)
   }
 

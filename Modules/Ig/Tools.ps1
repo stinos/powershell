@@ -311,7 +311,7 @@ Function Register-FileSystemWatcher {
     EnableRaisingEvents = $True
   }
 
-  if(-not $Action -Or ($Action -eq $Null)) {
+  if(-not $Action -Or ($Null -eq $Action)) {
     $Action = {
       Write-Host "$($Event.TimeGenerated) File $($Event.SourceEventArgs.ChangeType): '$($Event.SourceEventArgs.FullPath)'"
     }
