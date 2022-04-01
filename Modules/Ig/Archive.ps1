@@ -31,7 +31,7 @@ function Compress-ArchiveEx {
     if (-not $Update -and (Test-Path $DestinationPath)) {
       Remove-Item $DestinationPath -WhatIf:$WhatIfPreference -Verbose:$VerbosePreference -ErrorAction Stop
     }
-    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     if ($Update) {
       $action = "update"
       $openMode = [System.IO.Compression.ZipArchiveMode]::Update
