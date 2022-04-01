@@ -41,8 +41,8 @@ function Compress-ArchiveEx {
       $openMode = [System.IO.Compression.ZipArchiveMode]::Create
     }
     if ($PSCmdlet.ShouldProcess($DestinationPath, $action)) {
+      $DestinationPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DestinationPath)
       $zipFile = [System.IO.Compression.ZipFile]::Open(($DestinationPath), $openMode)
-      $DestinationPath = Resolve-Path -LiteralPath $DestinationPath
     }
     $ArchiveRoot = Resolve-Path -LiteralPath $ArchiveRoot
   }
@@ -61,7 +61,7 @@ function Compress-ArchiveEx {
       }
       $zipEntry = $zipFile.CreateEntry($relativePath)
       $zipEntryWriter = New-Object -TypeName System.IO.BinaryWriter $zipEntry.Open()
-      $zipEntryWriter.Write([System.IO.File]::ReadAllBytes($path))
+      $zipEntryWriter.Write([System.IO.File]::ReadAllBytes($resolvedPath))
       $zipEntryWriter.Close()
     }
   }
