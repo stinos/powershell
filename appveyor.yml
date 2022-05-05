@@ -1,0 +1,29 @@
+image:
+- Visual Studio 2017
+- Visual Studio 2019
+- Ubuntu
+
+clone_depth: 1
+build: off
+
+for:
+-
+  matrix:
+    only:
+      - image: Visual Studio 2017
+  install:
+  - ps: |
+      Install-Module -Name Pester -Force -SkipPublisherCheck
+  test_script:
+  - ps: |
+      . ./ci.ps1
+-
+  matrix:
+    except:
+      - image: Visual Studio 2017
+  install:
+  - pwsh: |
+      Install-Module -Name Pester -Force -SkipPublisherCheck
+  test_script:
+  - pwsh: |
+      . ./ci.ps1
