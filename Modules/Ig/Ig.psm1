@@ -4,6 +4,9 @@
   'Archive.ps1',
   'GitTools.ps1',
   'GitSsh.ps1',
+  'Management.ps1',
+  'Operators.ps1',
+  'Parameters.ps1',
   'Tools.ps1'
 ) |
   ForEach-Object {
