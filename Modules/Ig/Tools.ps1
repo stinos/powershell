@@ -277,16 +277,16 @@ function Write-EnvFromBatchFile {
   )
 
   $vars, $compositeVars = Get-EnvFromBatchFile $BatchFile $BatchFileArgs -DiffOnly:$DiffOnly -CompositeKeys $CompositeKeys
-  $result = ''
+  $result = [ArrayList] @()
   foreach ($item in $vars.GetEnumerator()) {
-    $result += "`$env:$($item.Key) = '$($item.Value)'`n"
+    $result.Add("`$env:$($item.Key) = '$($item.Value)'") | Out-NUll
   }
   if ($compositeVars) {
     foreach ($item in $compositeVars.GetEnumerator()) {
-      $result += "`$env:$($item.Key) = '$($item.Value)' + ';' + `$env:$($item.Key)`n"
+      $result.Add("`$env:$($item.Key) = '$($item.Value)' + ';' + `$env:$($item.Key)") | Out-NUll
     }
   }
-  $result | Out-File -FilePath $PsFile -Encoding ascii
+  $result | Sort-Object | Out-File -FilePath $PsFile -Encoding ascii
 }
 
 <#
