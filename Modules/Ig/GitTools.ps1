@@ -66,10 +66,23 @@ function Invoke-Git {
 
 <#
 .SYNOPSIS
+Expand the VAR in ${VAR} (style used by mr) as environment variable.
+#>
+function ExpandMrStyleVariables {
+  param(
+    [String] $in
+  )
+  # Turn ${var} into %var% then use standard function.
+  [System.Environment]::ExpandEnvironmentVariables(($in -replace '\$\{([^\}]+)\}', '%$1%'))
+}
+
+<#
+.SYNOPSIS
 Get repository info from .mrconfig-style file
 .DESCRIPTION
 By default looks for repositories in .mrconfig: this is the file normally used by 'mr'
-(http://linux.die.net/man/1/mr), but any text file which contains lines like 'git clone <address> <dir>' can be used.
+(http://linux.die.net/man/1/mr), but any text file which contains lines like 'git clone <address> <dir>'
+can be used. Expansion of environment variables is supported with ${VARIABLE} syntax.
 If such line is followed by another line which has 'git checkout <branch>', then <branch>
 is considered to be the inital branch and it will be checked out after cloning.
 Returns hash array with remote address, directory and initial branch name.
@@ -99,11 +112,17 @@ function Get-MrRepos {
   }
   return Select-String $MrConfig -Pattern "^checkout\s+=\s+git\s+clone\s+'?([^']+)'?\s+'?([^']+)'?" -Context (0, 1) |
     ForEach-Object {
-      @{ 'remote' = $_.Matches[0].Groups[1].Value;
-        'name' = $_.Matches[0].Groups[2].Value;
-        'directory' = (Join-Path $baseDir $_.Matches[0].Groups[2].Value);
-        'branch' = (& $getBranch $_) 
-      } }
+      $repository = @{
+        'remote' = (ExpandMrStyleVariables $_.Matches[0].Groups[1].Value);
+        'name' = (ExpandMrStyleVariables $_.Matches[0].Groups[2].Value);
+        'directory' = (ExpandMrStyleVariables $_.Matches[0].Groups[2].Value);
+        'branch' = (ExpandMrStyleVariables (& $getBranch $_)) 
+      }
+      if (-not [IO.Path]::IsPathRooted($repository.directory)) {
+        $repository.directory = Join-Path $baseDir $repository.directory
+      }
+      $repository
+    }
 }
 
 <#
