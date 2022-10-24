@@ -148,14 +148,18 @@ Read environment variables from cmd.exe environment after executing a batch file
 .DESCRIPTION
 NOTE this runs 'cmd /D' so disables AutoRun commands from the registry. This should make sure that
 the resulting environment is really only the result of the specific batch file (since cmd.exe inherits
-the current environment), and doesn't contain other things added via those AutoRun entries
-(notably: from Anaconda after having ran conda init in a cmd session).
+the current environment - if $UseNewEnvironment is not used), and doesn't contain other things added
+via those AutoRun entries (notably: from Anaconda after having ran conda init in a cmd session).
 .PARAMETER BatchFile
 The file to call.
 .PARAMETER BatchFileArgs
 Arguments for the batch file.
 .PARAMETER DiffOnly
 Scan for items which were added or changed by the batchfile and return only those.
+.PARAMETER UseNewEnvironment
+Do not inherit the current set of environment variables while scanning for new ones;
+note this doesn't necessarily mean all environment variables will have a new value,
+since they'll still be initialized and possibly to the same value they have now.
 .PARAMETER CompositeKeys
 For use with DiffOnly: list of keys which consist of multiple values separated by ';'.
 For these the set difference will be returned explcicitly as second argument.
@@ -172,12 +176,26 @@ function Get-EnvFromBatchFile {
     [Parameter(Mandatory)] [Alias('File')] [ValidateScript({Test-Path $_})] [String] $BatchFile,
     [Parameter()] [String] $BatchFileArgs = '',
     [Parameter()] [Switch] $DiffOnly,
+    [Parameter()] [Switch] $UseNewEnvironment,
     [Parameter()] [String[]] $CompositeKeys = @('PATH', 'PsModulePath')
   )
 
   function Get-EnvVars {
     $vars = @{}
-    foreach ($line in (& cmd /D /C @Args)) {
+    if ($UseNewEnvironment) {
+      $cmdArgs = @('/D', '/C') + $Args
+      $tempFile = [IO.Path]::GetTempFileName()
+      Start-Process -Wait -NoNewWindow -UseNewEnvironment -FilePath cmd.exe -ArgumentList $cmdArgs -RedirectStandardOutput $tempFile
+      $result = Get-Content $tempFile
+      # Start-Process handles errors already, this is so that the check below passes.
+      $LASTEXITCODE = 0
+    } else {
+      $result = & cmd /D /C @Args
+    }
+    if (-not $result -or $LASTEXITCODE -ne -0) {
+      Write-Error "Command '$Args' failed or returned no variables"
+    }
+    foreach ($line in $result) {
       if ($line -match '(.*?)=(.*)') {
         $vars.Add($Matches[1], $Matches[2])
       }
@@ -231,6 +249,9 @@ Note: uses cmd /D, see Get-EnvFromBatchFile.
 The file to call.
 .PARAMETER BatchFileArgs
 Arguments for the batch file.
+.PARAMETER UseNewEnvironment
+Do not inherit the current set of environment variables while scanning for new ones.
+Use with care: this might overwrite environment variables with unintended values.
 .EXAMPLE
 Set-EnvFromBatchFile "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat"
 #>
@@ -238,12 +259,13 @@ function Set-EnvFromBatchFile {
   [CmdletBinding(SupportsShouldProcess)]
   param (
     [Parameter(Mandatory)] [Alias('File')] [String] $BatchFile,
-    [Parameter()] [String] $BatchFileArgs = ''
+    [Parameter()] [String] $BatchFileArgs = '',
+    [Parameter()] [Switch] $UseNewEnvironment
   )
 
   Write-Verbose "Set path from $BatchFile"
 
-  $vars = Get-EnvFromBatchFile -BatchFile $BatchFile -BatchFileArgs $BatchFileArgs -DiffOnly -CompositeKeys @()
+  $vars = Get-EnvFromBatchFile -BatchFile $BatchFile -BatchFileArgs $BatchFileArgs -DiffOnly -UseNewEnvironment:$UseNewEnvironment -CompositeKeys @()
   foreach ($item in $vars.GetEnumerator()) {
     $key = $item.key
     $value = $item.value
@@ -266,6 +288,14 @@ The file to call.
 The PS file to output
 .PARAMETER BatchFileArgs
 Arguments for the batch file.
+.PARAMETER DiffOnly
+Scan for items which were added or changed by the batchfile and return only those.
+.PARAMETER UseNewEnvironment
+Do not inherit the current set of environment variables while scanning for new ones.
+.EXAMPLE
+# Typical usage for VsDevCmd:
+Write-EnvFromBatchFile -BatchFile 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat' `
+-PsFile vsvars.ps1 -BatchFileArgs '-arch=x64 -host_arch=x64' -UseNewEnvironment -DiffOnly
 #>
 function Write-EnvFromBatchFile {
   param (
@@ -273,17 +303,18 @@ function Write-EnvFromBatchFile {
     [Parameter(Mandatory)] [String] $PsFile,
     [Parameter()] [String] $BatchFileArgs = '',
     [Parameter()] [Switch] $DiffOnly,
+    [Parameter()] [Switch] $UseNewEnvironment,
     [Parameter()] [String[]] $CompositeKeys = @('PATH', 'PsModulePath')
   )
 
-  $vars, $compositeVars = Get-EnvFromBatchFile $BatchFile $BatchFileArgs -DiffOnly:$DiffOnly -CompositeKeys $CompositeKeys
-  $result = [ArrayList] @()
+  $vars, $compositeVars = Get-EnvFromBatchFile $BatchFile $BatchFileArgs -DiffOnly:$DiffOnly -UseNewEnvironment:$UseNewEnvironment -CompositeKeys $CompositeKeys
+  $result = [System.Collections.ArrayList] @("# Generated from: $BatchFile $BatchFileArgs")
   foreach ($item in $vars.GetEnumerator()) {
-    $result.Add("`$env:$($item.Key) = '$($item.Value)'") | Out-NUll
+    $result.Add("`$env:$($item.Key) = '$($item.Value)'") | Out-Null
   }
   if ($compositeVars) {
     foreach ($item in $compositeVars.GetEnumerator()) {
-      $result.Add("`$env:$($item.Key) = '$($item.Value)' + ';' + `$env:$($item.Key)") | Out-NUll
+      $result.Add("`$env:$($item.Key) = '$($item.Value)' + ';' + `$env:$($item.Key)") | Out-Null
     }
   }
   $result | Sort-Object | Out-File -FilePath $PsFile -Encoding ascii
