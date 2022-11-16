@@ -308,7 +308,10 @@ function Write-EnvFromBatchFile {
   )
 
   $vars, $compositeVars = Get-EnvFromBatchFile $BatchFile $BatchFileArgs -DiffOnly:$DiffOnly -UseNewEnvironment:$UseNewEnvironment -CompositeKeys $CompositeKeys
-  $result = [System.Collections.ArrayList] @("# Generated from: $BatchFile $BatchFileArgs")
+  $result = [System.Collections.ArrayList] @(
+    $keysAsString = ($CompositeKeys | Foreach-Object{"'$_'"}) -join ','
+    "# Generated from: Write-EnvFromBatchFile '$BatchFile' '$PsFile' '$BatchFileArgs' -DiffOnly:`$$DiffOnly -UseNewEnvironment:`$$UseNewEnvironment -CompositeKeys @($keysAsString)"
+  )
   foreach ($item in $vars.GetEnumerator()) {
     $result.Add("`$env:$($item.Key) = '$($item.Value)'") | Out-Null
   }
