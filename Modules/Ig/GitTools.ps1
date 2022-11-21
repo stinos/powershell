@@ -189,105 +189,102 @@ function Write-MrConfig {
 .SYNOPSIS
 Clone or update a git repository.
 .DESCRIPTION
-This will clone from a git remote into the given directory if the directory doesn't yet exist,
+Clone from a git remote into the given directory if the directory doesn't yet exist,
 or else update the directory content according to the parameters.
 
 In case of a clone:
 - first clones
-- if a branch is specified it is checked out
-- if no branch specified but UseNewest is true, figures out the newest commit and (forcibly) checks it out
+- if $Branch is specified it is checked out
+- else if $UseNewest is true, figures out the newest commit and checks it out
+- otherwise the default branch, whichever that may be, is used since that is what clone does
 
-In case of an existing repository and specific branch:
-- if ChangeBranch is true the branch is (forcibly) checked out
-- if UpdateBranch is true the branch is updated using pull --rebase
-
-In case of an existing repository and no specific branch:
-- if UpdateBranch is true the branch is updated using pull --rebase
-- else if UseNewest is true, figures out the newest commit and (forcibly) checks it out
+In case of an existing repository:
+- if $Branch is specified it is (forcibly, i.e. might discard current changes) checked out
+- else if $UseNewest is true, figures out the newest commit and (forcibly) checks it out
+- otherwise the current branch is updated using pull --rebase
 
 After each scenario submodules, if any, are updated.
-.PARAMETER Directory full destination path
-.PARAMETER Remote git remote address
-.PARAMETER Branch branch to checkout
-.PARAMETER ChangeBranch change to Branch if repo exists already
-.PARAMETER UpdateBranch pull current or new branch
-.PARAMETER UseNewest checkout newest commit
-.PARAMETER Shallow do a Shallow clone
-.PARAMETER Quiet add -q to commands
+.PARAMETER Directory
+Full destination path.
+.PARAMETER Remote
+Git remote address.
+.PARAMETER Branch
+Branch to checkout.
+.PARAMETER UseNewest
+Checkout newest commit.
+.PARAMETER Shallow
+Perform a Shallow clone (also of submodules).
+.PARAMETER Recursive
+Use --recursive for submodule init. Separate flag because this might take ages,
+whereas you might only need a couple of submodules. There's no good solution for that
+now apart from doing it manually.
+.PARAMETER Quiet
+Add -q to commands.
 #>
 function Update-GitRepo {
+  [CmdletBinding(DefaultParameterSetName = 'Branch')]
   param (
-    [Parameter(Mandatory = $True)] [String] $Directory,
-    [Parameter(Mandatory = $True)] [String] $Remote,
-    [String] $Branch = '',
-    [Boolean] $ChangeBranch = $True,
-    [Boolean] $UpdateBranch = $True,
-    [Boolean] $UseNewest = $False,
-    [Boolean] $Shallow = $False,
-    [Boolean] $Quiet = $False
+    [Parameter(Mandatory = $True, Position = 0)] [String] $Directory,
+    [Parameter(Mandatory = $True, Position = 1)] [String] $Remote,
+    [Parameter(ParameterSetName = 'Branch')] $Branch = '',
+    [Parameter(ParameterSetName = 'UseNewest')] [Switch] $UseNewest,
+    [Switch] $Shallow,
+    [Switch] $Recursive,
+    [Switch] $Quiet
   )
 
-  if ($UseNewest) {
-    $UpdateBranch = $False
-  }
-  $needsCheckout = -not ($Branch -eq '')
-
-  function callgit() {
+  function CallGit() {
+    param (
+      [Parameter(Position = 0, ValueFromRemainingArguments = $True)] [string] $Command
+    )
+    $thisCommand = $Command
     if ($Quiet) {
-      $args = '-q ' + $args
+      $thisCommand = $thisCommand + ' -q'
     }
-    Invoke-Git -Directory $Directory $args
+    Invoke-Git -Directory $Directory $thisCommand
   }
 
   if (-not (Test-Path $Directory)) {
+    Write-Verbose "$Directory doesn't exist, cloning"
     if ($Shallow) {
-      # Note appveyor's git doesn't yet have '--Shallow-submodules'
-      callgit clone --depth=1 --no-single-branch $Remote
+      CallGit clone --depth=1 --no-single-branch $Remote
     }
     else {
-      Invoke-Git -Directory $Directory clone $Remote
+      CallGit clone $Remote
     }
-    if ($needsCheckout -and -not ($Branch -eq 'master')) {
-      Invoke-Git -Directory $Directory checkout $Branch
+    if ($Branch) {
+      CallGit checkout $Branch
     }
   }
   else {
     Write-Verbose "$Directory is an existing repository"
-    if ($needsCheckout -and $ChangeBranch) {
-      callgit checkout --force $Branch
+    if ($Branch) {
+      CallGit checkout --force $Branch
     }
-    if ($UpdateBranch) {
-      callgit pull --rebase
+    if ($UseNewest) {
+      CallGit fetch --depth=1
     }
-    elseif ($UseNewest) {
-      callgit fetch --depth=1
+    else {
+      CallGit pull --rebase
     }
   }
 
   if ($UseNewest) {
-    $lastCommit = Invoke-Git -Directory $Directory 'log -n1 --all --format="%h %d"'
-    Write-Verbose ('[{0}]' -f $lastCommit)
-    callgit checkout --force $lastCommit.Split(' ')[0]
+    $lastCommit = CallGit 'log -n1 --all --format="%h %d"'
+    Write-Verbose "Last commit is $lastCommit"
+    CallGit checkout --force $lastCommit.Split(' ')[0]
   }
 
-  if (($UpdateBranch -or $UseNewest) -and (Test-Path (Join-Path $Directory '.gitmodules'))) {
-    # Still need to figure out how to Shallow clone these
-    callgit submodule update --init --recursive
+  if (Test-Path (Join-Path $Directory '.gitmodules')) {
+    $command = 'submodule update --init'
+    if ($Recursive) {
+      $command += ' --recursive'
+    }
+    if ($Shallow) {
+      $command += ' --depth=1'
+    }
+    CallGit $command
   }
-}
-
-<#
-.SYNOPSIS
-Clone repository if it does not yet exist.
-.DESCRIPTION
-Takes input as returned by Get-MrRepos.
-#>
-function Invoke-CloneIfNeeded {
-  param (
-    [Parameter(Mandatory)] [Object[]] $repo
-  )
-
-  Update-GitRepo $repo.directory $repo.remote $repo.branch -UpdateBranch $False -ChangeBranch $False -UseNewest $False -Shallow $False
 }
 
 <#
@@ -327,11 +324,13 @@ function Invoke-Mr {
       Write-Host -ForegroundColor cyan '[mr] ' $_.directory
     }
     if ($_.remote) {
-      if ($Table) {
-        $cloneOutput = Invoke-CloneIfNeeded $_
-      }
-      else {
-        Invoke-CloneIfNeeded $_
+      if (-not (Test-Path $_.directory)) {
+        if ($Table) {
+          $cloneOutput = Update-GitRepo $_.directory $_.remote -Branch $_.branch
+        }
+        else {
+          Update-GitRepo $_.directory $_.remote -Branch $_.branch
+        }
       }
     }
     if ($Script) {
