@@ -294,6 +294,21 @@ Multiple repository tool for git
 Run git commands on multiple repositories.
 By default looks for repositories in .mrconfig, see Get-MrRepos,
 or existing repositories to run on can be passed instead.
+.PARAMETER Directory
+Directory containing the .mrconfig file.
+.PARAMETER Repositories
+Run on these repositories instead of on a .mrconfig file.
+.PARAMETER Table
+Output all results in a table instead of printing to output.
+Mostly usefule for automation/inspection.
+.PARAMETER UseNewest
+Checkout newest commit.
+.PARAMETER Shallow
+If needed to clone, use shallow clone.
+.PARAMETER Script
+Instead of running $Command, pass all repositories and $Command to this ScriptBlock.
+.PARAMETER Command
+The git command.
 .EXAMPLE
 PS C:\> Mr # will clone if needed
 PS C:\> Mr -Table status # output table to pipeline, don't use Write-Host
@@ -303,15 +318,17 @@ PS C:\> Mr -Repositories a, b, c checkout master
 PS C:\> Mr checkout master -Repositories a, b, c
 #>
 function Invoke-Mr {
+  [CmdletBinding(DefaultParameterSetName = 'Directory')]
   param (
-    [Parameter()] [String[]] $Repositories = @(),
-    [Parameter()] [String] $Directory = (Get-Location),
+    [Parameter(ParameterSetName = 'Repositories')] [String[]] $Repositories = @(),
+    [Parameter(ParameterSetName = 'Directory')] [String] $Directory = (Get-Location),
     [Parameter()] [Switch] $Table,
+    [Parameter()] [Switch] $Shallow,
     [Parameter()] [ScriptBlock] $Script,
     [Parameter(Position = 0, ValueFromRemainingArguments = $True)] [String] $Command
   )
 
-  if ($Repositories.Count -eq 0) {
+  if ($PsCmdlet.ParameterSetName -eq 'Directory') {
     $repoObjects = Get-MrRepos -ErrorAction Stop (Join-Path $Directory '.mrconfig')
   }
   else {
@@ -326,10 +343,10 @@ function Invoke-Mr {
     if ($_.remote) {
       if (-not (Test-Path $_.directory)) {
         if ($Table) {
-          $cloneOutput = Update-GitRepo $_.directory $_.remote -Branch $_.branch
+          $cloneOutput = Update-GitRepo $_.directory $_.remote -Branch $_.branch -Shallow:$Shallow
         }
         else {
-          Update-GitRepo $_.directory $_.remote -Branch $_.branch
+          Update-GitRepo $_.directory $_.remote -Branch $_.branch -Shallow:$Shallow
         }
       }
     }
