@@ -26,9 +26,15 @@ function Invoke-Git {
     [Parameter()] [String] $Git = 'git',
     [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments = $true)] [string] $Command
   )
+  $currentDir = $null
   try {
     $commandParts = $Command.Split(' ')
     $subCommand = $commandParts[0]
+    # Not strictly needed for git, but since we rely on subcommand being the first one.
+    if ($subCommand.StartsWith('-')) {
+      Write-Error "First item in Command argument should be a git command, not a flag: $Command"
+      return
+    }
     if ($Directory -and $subCommand -eq 'clone') {
       # To make all commands look alike handle this one as well.
       $Command = ($commandParts + @($Directory)) -join ' '
